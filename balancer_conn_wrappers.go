@@ -229,7 +229,12 @@ func (ccb *ccBalancerWrapper) UpdateBalancerState(s connectivity.State, p balanc
 	if ccb.subConns == nil {
 		return
 	}
-	ccb.cc.csMgr.updateState(s)
+	p := ccb.cc.blockingpicker
+	var err error
+	if s == connectivity.TransientFailure {
+		err = p.connectionError()
+	}
+	ccb.cc.csMgr.updateState(s, err)
 	ccb.cc.blockingpicker.updatePicker(p)
 }
 

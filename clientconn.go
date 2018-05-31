@@ -625,13 +625,14 @@ func DialContext(ctx context.Context, target string, opts ...DialOption) (conn *
 type connectivityStateManager struct {
 	mu         sync.Mutex
 	state      connectivity.State
+	err        error
 	notifyChan chan struct{}
 }
 
 // updateState updates the connectivity.State of ClientConn.
 // If there's a change it notifies goroutines waiting on state change to
 // happen.
-func (csm *connectivityStateManager) updateState(state connectivity.State) {
+func (csm *connectivityStateManager) updateState(state connectivity.State, err error) {
 	csm.mu.Lock()
 	defer csm.mu.Unlock()
 	if csm.state == connectivity.Shutdown {
@@ -641,6 +642,7 @@ func (csm *connectivityStateManager) updateState(state connectivity.State) {
 		return
 	}
 	csm.state = state
+	csm.err = err
 	if csm.notifyChan != nil {
 		// There are other goroutines waiting on this channel.
 		close(csm.notifyChan)
@@ -648,10 +650,10 @@ func (csm *connectivityStateManager) updateState(state connectivity.State) {
 	}
 }
 
-func (csm *connectivityStateManager) getState() connectivity.State {
+func (csm *connectivityStateManager) getState() (connectivity.State, error) {
 	csm.mu.Lock()
 	defer csm.mu.Unlock()
-	return csm.state
+	return csm.state, csm.err
 }
 
 func (csm *connectivityStateManager) getNotifyChan() <-chan struct{} {
@@ -702,7 +704,7 @@ type ClientConn struct {
 // This is an EXPERIMENTAL API.
 func (cc *ClientConn) WaitForStateChange(ctx context.Context, sourceState connectivity.State) bool {
 	ch := cc.csMgr.getNotifyChan()
-	if cc.csMgr.getState() != sourceState {
+	if st, _ := cc.csMgr.getState(); st != sourceState {
 		return true
 	}
 	select {
@@ -716,17 +718,17 @@ func (cc *ClientConn) WaitForStateChange(ctx context.Context, sourceState connec
 // GetState returns the connectivity.State of ClientConn.
 // This is an EXPERIMENTAL API.
 func (cc *ClientConn) GetState() connectivity.State {
-	return cc.csMgr.getState()
+	st, _ := cc.csMgr.getState()
+	return st
 }
 
-// GetStatus returns the status of cc as an error produced by the status
-// package.  If the state is TransientFailure, the status error will be
-// non-nil.  Otherwise, it will always be nil.
-func (cc *ClientConn) GetStatus() error {
-	if cc.GetState() != connectivity.TransientFailure {
-		return nil
-	}
-	return status.Errorf(codes.Unavailable, "latest connection error: %v", cc.blockingpicker.connectionError())
+// GetStateAndStatus returns the connectivity.State of ClientConn, and, if the
+// state is TransientFailure, the error returned will be a non-nil status error
+// for the most recent connection error experienced by the ClientConn.
+//
+// This is an EXPERIMENTAL API.
+func (cc *ClientConn) GetStateAndStatus() (connectivity.State, error) {
+	return cc.csMgr.getState()
 }
 
 func (cc *ClientConn) scWatcher() {
@@ -1085,7 +1087,7 @@ func (cc *ClientConn) Close() error {
 	}
 	conns := cc.conns
 	cc.conns = nil
-	cc.csMgr.updateState(connectivity.Shutdown)
+	cc.csMgr.updateState(connectivity.Shutdown, nil)
 
 	rWrapper := cc.resolverWrapper
 	cc.resolverWrapper = nil
