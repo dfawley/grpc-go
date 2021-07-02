@@ -1194,7 +1194,7 @@ func (ac *addrConn) resetTransport() {
 		}
 		ac.cc.resolveNow(resolver.ResolveNowOptions{})
 	} else {
-		// Success
+		// Success; set addrConn state and reset backoff.
 		ac.mu.Lock()
 		if ac.state == connectivity.Shutdown {
 			ac.mu.Unlock()
