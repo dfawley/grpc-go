@@ -1281,8 +1281,8 @@ func (ac *addrConn) createTransport(addr resolver.Address, copts transport.Conne
 	}
 
 	onClose := func() {
-		close(onCloseCalled)
 		connClosed.Fire()
+		close(onCloseCalled)
 	}
 
 	onPrefaceReceipt := func() {
