@@ -322,7 +322,7 @@ func DialContext(ctx context.Context, target string, opts ...DialOption) (conn *
 	// A blocking dial blocks until the clientConn is ready.
 	if cc.dopts.block {
 		for {
-			s := cc.GetState()
+			s := cc.GetState(true)
 			if s == connectivity.Ready {
 				break
 			} else if cc.dopts.copts.FailOnNonTempDialError && s == connectivity.TransientFailure {
@@ -535,14 +535,23 @@ func (cc *ClientConn) WaitForStateChange(ctx context.Context, sourceState connec
 	}
 }
 
-// GetState returns the connectivity.State of ClientConn.
+// GetState returns the connectivity.State of ClientConn.  If the connectivity
+// state is IDLE and connect is true, the client attempts to connect.
 //
 // Experimental
 //
 // Notice: This API is EXPERIMENTAL and may be changed or removed in a
-// later release.
-func (cc *ClientConn) GetState() connectivity.State {
-	return cc.csMgr.getState()
+// later release.  connect will become a required parameter in the future.
+func (cc *ClientConn) GetState(connect ...bool) connectivity.State {
+	state := cc.csMgr.getState()
+	if state == connectivity.Idle && len(connect) > 0 && connect[0] {
+		cc.mu.Lock()
+		for ac := range cc.conns {
+			go ac.connect()
+		}
+		cc.mu.Unlock()
+	}
+	return state
 }
 
 func (cc *ClientConn) scWatcher() {
@@ -795,7 +804,7 @@ func (cc *ClientConn) removeAddrConn(ac *addrConn, err error) {
 
 func (cc *ClientConn) channelzMetric() *channelz.ChannelInternalMetric {
 	return &channelz.ChannelInternalMetric{
-		State:                    cc.GetState(),
+		State:                    cc.GetState(false),
 		Target:                   cc.target,
 		CallsStarted:             atomic.LoadInt64(&cc.czData.callsStarted),
 		CallsSucceeded:           atomic.LoadInt64(&cc.czData.callsSucceeded),
