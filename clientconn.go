@@ -1171,7 +1171,6 @@ func (ac *addrConn) resetTransport() {
 	connectDeadline := time.Now().Add(dialDuration)
 
 	ac.updateConnectivityState(connectivity.Connecting, nil)
-	ac.transport = nil
 	ac.mu.Unlock()
 
 	newTr, addr, connClosed, err := ac.tryAllAddrs(addrs, connectDeadline)
@@ -1225,6 +1224,7 @@ func (ac *addrConn) resetTransport() {
 	}
 
 	ac.mu.Lock()
+	ac.transport = nil
 	if ac.state != connectivity.Shutdown {
 		ac.updateConnectivityState(connectivity.Idle, err)
 	}
