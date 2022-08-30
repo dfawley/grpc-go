@@ -559,7 +559,9 @@ func (s) TestClientErrorNotify(t *testing.T) {
 	defer cancel()
 	go server.stop()
 	// ct.reader should detect the error and activate ct.Error().
-	<-ct.Error()
+	ctx, cancel := context.WithTimeout(context.Background(), defaultTestTimeout)
+	defer cancel()
+	testutils.ReceiveOrFatal(ctx, t, <-ct.Error())
 	ct.Close()
 }
 

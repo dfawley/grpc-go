@@ -6787,7 +6787,7 @@ func (s) TestGoAwayThenClose(t *testing.T) {
 	go s1.GracefulStop()
 
 	// Wait for connection 2 to be established.
-	<-conn2Established.Done()
+	testutils.ReceiveOrFatal(ctx, t, conn2Established.Done())
 
 	// Close connection 1.
 	s1.Stop()

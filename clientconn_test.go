@@ -34,6 +34,7 @@ import (
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials"
 	internalbackoff "google.golang.org/grpc/internal/backoff"
+	"google.golang.org/grpc/internal/testutils"
 	"google.golang.org/grpc/internal/transport"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/resolver"
@@ -74,12 +75,9 @@ func (s) TestDialWithTimeout(t *testing.T) {
 		t.Fatalf("Dial failed. Err: %v", err)
 	}
 	defer client.Close()
-	timeout := time.After(1 * time.Second)
-	select {
-	case <-timeout:
-		t.Fatal("timed out waiting for server to finish")
-	case <-lisDone:
-	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	testutils.ReceiveOrFatal(ctx, t, lisDone)
 }
 
 func (s) TestDialWithMultipleBackendsNotSendingServerPreface(t *testing.T) {
