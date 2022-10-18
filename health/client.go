@@ -20,18 +20,87 @@ package health
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
+	"sync"
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/balancer"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/connectivity"
+	healthgrpc "google.golang.org/grpc/health/grpc_health_v1"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/internal"
 	"google.golang.org/grpc/internal/backoff"
+	"google.golang.org/grpc/internal/grpcsync"
+	"google.golang.org/grpc/resolver"
+	"google.golang.org/grpc/serviceconfig"
 	"google.golang.org/grpc/status"
 )
+
+// WithHealthChecking wraps a balancer implementation and intercepts NewSubConn
+// calls, installing health checking on those SubConns and controlling the
+// state of the SubConns.
+func WithHealthChecking(b balancer.Builder) balancer.Builder {
+	if _, ok := b.(balancer.ConfigParser); ok {
+		return &bb{Builder: b} // TODO: does this need to be a different type??
+	}
+	return &bb{Builder: b}
+}
+
+type bb struct {
+	balancer.Builder
+}
+
+func (bb *bb) Build(cc balancer.ClientConn, opts balancer.BuildOptions) balancer.Balancer {
+	wcc := &wrappedCC{ClientConn: cc}
+	return &wrappedBalancer{Balancer: bb.Builder.Build(wcc, opts), wcc: wcc}
+}
+
+func (bb *bb) ParseConfig(cfg json.RawMessage) (serviceconfig.LoadBalancingConfig, error) {
+	if cp, ok := bb.Builder.(ConfigParser); ok {
+		return cp(cfg)
+	}
+	return nil, nil // Unsupported?? TODO!
+}
+
+type wrappedBalancer struct {
+	Balancer balancer.Balancer
+	wcc      *wrappedCC
+}
+
+func (w *wrappedBalancer) UpdateSubConnState(sc balancer.SubConn, state balancer.SubConnState) {
+	w.wcc.producers[sc].doSomething(state) // that calls w.Balancer.UpdateSubConnState()
+}
+
+type wrappedCC struct {
+	balancer.ClientConn
+	subConnProducers map[balancer.SubConn]*producer
+	subConnClosers   map[balancer.SubConn]func()
+}
+
+func (w *wrappedCC) NewSubConn(addrs []resolver.Address, opts balancer.NewSubConnOptions) (balancer.SubConn, error) {
+	sc, err := w.ClientConn.NewSubConn(addrs, opts)
+	if err != nil {
+		return nil, err
+	}
+	pr, close := sc.GetOrBuildProducer(producerBuilderSingleton)
+	p := pr.(*producer)
+	w.subConnClosers[sc] = close
+	w.subConnProducers[sc] = p
+	pr.doSomething()
+}
+
+func (w *wrappedCC) RemoveSubConn(sc balancer.SubConn) {
+	if closer := w.subConnClosers[sc]; closer != nil {
+		closer()
+		delete(w.subConnClosers, sc)
+		delete(w.subConnProducers, sc)
+	}
+	w.ClientConn.RemoveSubConn(sc)
+}
 
 var (
 	backoffStrategy = backoff.DefaultExponential
@@ -49,7 +118,47 @@ var (
 )
 
 func init() {
-	internal.HealthCheckFunc = clientHealthCheck
+	balancer.Register(bb{})
+	internal.SetSomething()
+}
+
+type producerBuilder struct{}
+
+// Build constructs and returns a producer and its cleanup function
+func (*producerBuilder) Build(cci interface{}) (balancer.Producer, func()) {
+	ctx, cancel := context.WithCancel(context.Background())
+	p := &producer{
+		client:    healthgrpc.NewOpenRcaServiceClient(cci.(grpc.ClientConnInterface)),
+		closed:    grpcsync.NewEvent(),
+		intervals: make(map[time.Duration]int),
+		listeners: make(map[OOBListener]struct{}),
+		backoff:   internal.DefaultBackoffFunc,
+	}
+	go p.run(ctx)
+	return p, func() {
+		cancel()
+		<-p.closed.Done() // Block until stream stopped.
+	}
+}
+
+var producerBuilderSingleton = &producerBuilder{}
+
+type producer struct {
+}
+
+type producer struct {
+	client healthgrpc.HealthClient
+
+	closed *grpcsync.Event // fired when closure completes
+	// backoff is called between stream attempts to determine how long to delay
+	// to avoid overloading a server experiencing problems.  The attempt count
+	// is incremented when stream errors occur and is reset when the stream
+	// reports a result.
+	backoff func(int) time.Duration
+
+	mu        sync.Mutex
+	intervals map[time.Duration]int    // map from interval time to count of listeners requesting that time
+	listeners map[OOBListener]struct{} // set of registered listeners
 }
 
 const healthCheckMethod = "/grpc.health.v1.Health/Watch"

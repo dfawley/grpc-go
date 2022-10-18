@@ -126,9 +126,6 @@ type NewSubConnOptions struct {
 	// Deprecated: Use the Attributes field in resolver.Address to pass
 	// arbitrary data to the credential handshaker.
 	CredsBundle credentials.Bundle
-	// HealthCheckEnabled indicates whether health check service should be
-	// enabled on this SubConn
-	HealthCheckEnabled bool
 }
 
 // State contains the balancer's state relevant to the gRPC ClientConn.

@@ -21,18 +21,12 @@
 package internal
 
 import (
-	"context"
 	"time"
 
-	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/serviceconfig"
 )
 
 var (
-	// WithHealthCheckFunc is set by dialoptions.go
-	WithHealthCheckFunc interface{} // func (HealthChecker) DialOption
-	// HealthCheckFunc is used to provide client-side LB channel health checking
-	HealthCheckFunc HealthChecker
 	// BalancerUnregister is exported by package balancer to unregister a balancer.
 	BalancerUnregister func(name string)
 	// KeepaliveMinPingTime is the minimum ping interval.  This must be 10s by
@@ -128,16 +122,6 @@ var (
 	// TODO: Remove this function once the RBAC env var is removed.
 	UnregisterRBACHTTPFilterForTesting func()
 )
-
-// HealthChecker defines the signature of the client-side LB channel health checking function.
-//
-// The implementation is expected to create a health checking RPC stream by
-// calling newStream(), watch for the health status of serviceName, and report
-// it's health back by calling setConnectivityState().
-//
-// The health checking protocol is defined at:
-// https://github.com/grpc/grpc/blob/master/doc/health-checking.md
-type HealthChecker func(ctx context.Context, newStream func(string) (interface{}, error), setConnectivityState func(connectivity.State, error), serviceName string) error
 
 const (
 	// CredsBundleModeFallback switches GoogleDefaultCreds to fallback mode.
