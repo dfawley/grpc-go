@@ -543,7 +543,13 @@ func (l *loopyWriter) run() (err error) {
 			l.logger.Infof("loopyWriter exiting with error: %v", err)
 		}
 		if !isIOError(err) {
-			l.framer.writer.Flush()
+			if l.logger.V(logLevel) {
+				l.logger.Infof("closing connection due to non-IO error")
+			}
+			err2 := l.framer.writer.Flush()
+			if err2 != nil {
+				l.logger.Infof("error from flushing: ", err2)
+			}
 			l.conn.Close()
 		}
 		l.cbuf.finish()

@@ -25,4 +25,5 @@ require (
 	github.com/envoyproxy/protoc-gen-validate v0.10.0 // indirect
 	golang.org/x/text v0.8.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
+	google.golang.org/grpc/examples v0.0.0-20230328230341-415ccdf15456 // indirect
 )

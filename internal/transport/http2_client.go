@@ -974,7 +974,9 @@ func (t *http2Client) Close(err error) {
 	t.mu.Unlock()
 	t.controlBuf.finish()
 	t.cancel()
-	t.conn.Close()
+	if err := t.conn.Close(); err != nil && t.logger.V(logLevel) {
+		t.logger.Infof("Error closing underlying net.Conn during Close: %v", err)
+	}
 	channelz.RemoveEntry(t.channelzID)
 	// Append info about previous goaways if there were any, since this may be important
 	// for understanding the root cause for this connection to be closed.
