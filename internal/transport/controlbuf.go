@@ -353,13 +353,16 @@ func (c *controlBuffer) executeAndPut(f func(it interface{}) bool, it cbItem) (b
 		wakeUp = true
 		c.consumerWaiting = false
 	}
-	c.list.enqueue(it)
-	if it.isTransportResponseFrame() {
-		c.transportResponseFrames++
-		if c.transportResponseFrames == maxQueuedTransportResponseFrames {
-			// We are adding the frame that puts us over the threshold; create
-			// a throttling channel.
-			c.trfChan.Store(make(chan struct{}))
+
+	if it != nil {
+		c.list.enqueue(it)
+		if it.isTransportResponseFrame() {
+			c.transportResponseFrames++
+			if c.transportResponseFrames == maxQueuedTransportResponseFrames {
+				// We are adding the frame that puts us over the threshold; create
+				// a throttling channel.
+				c.trfChan.Store(make(chan struct{}))
+			}
 		}
 	}
 	c.mu.Unlock()

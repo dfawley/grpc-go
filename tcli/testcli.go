@@ -5,7 +5,6 @@ import (
 	"flag"
 	"log"
 	"net"
-	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/benchmark/latency"
@@ -19,10 +18,12 @@ func main() {
 	flag.Parse()
 
 	//const maxWindowSize int32 = (1 << 20) * 16
+	//const maxWindowSize2 int32 = 935420
 
 	conn, err := grpc.Dial(*addr,
-		//grpc.WithInitialWindowSize(maxWindowSize),
-		//grpc.WithInitialConnWindowSize(maxWindowSize),
+		//grpc.WithInitialWindowSize(maxWindowSize2),
+		//grpc.WithInitialConnWindowSize(maxWindowSize2),
+		grpc.WithWriteBufferSize(10*1024*1024),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),
 		grpc.WithReturnConnectionError(),
@@ -48,7 +49,6 @@ func main() {
 			log.Fatalf("unexpected error from UnaryEcho: %v", err)
 		}
 		log.Print("finish RPC")
-		time.Sleep(time.Millisecond)
 	}
 	select {}
 }

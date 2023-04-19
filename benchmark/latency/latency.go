@@ -70,7 +70,7 @@ var (
 	//WAN simulates wide area network.
 	WAN = Network{20 * 1024, 30 * time.Millisecond, 1500}
 	//Longhaul simulates bad network.
-	Longhaul = Network{1000 * 1024, 200 * time.Millisecond, 9000}
+	Longhaul = Network{1000 * 1024, 220 * time.Millisecond, 1000}
 )
 
 // Conn returns a net.Conn that wraps c and injects n's latency into that
@@ -149,7 +149,8 @@ func (c *conn) Read(p []byte) (n int, err error) {
 		}
 	}
 	// Read from readBuf.
-	return c.readBuf.Read(p)
+	n, _ = c.readBuf.Read(p)
+	return n, nil
 }
 
 // sync does a handshake and then measures the latency on the network in

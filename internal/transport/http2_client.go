@@ -1082,6 +1082,7 @@ func (t *http2Client) updateWindow(s *Stream, n uint32) {
 // for the transport and the stream based on the current bdp
 // estimation.
 func (t *http2Client) updateFlowControl(n uint32) {
+	t.logger.Infof("UPDATING FLOW CONTROL TO %v", n)
 	updateIWS := func(interface{}) bool {
 		t.initialWindowSize = int32(n)
 		t.mu.Lock()

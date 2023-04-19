@@ -345,6 +345,7 @@ func (w *bufWriter) Write(b []byte) (n int, err error) {
 }
 
 func (w *bufWriter) Flush() error {
+	logger.Infof("flushing bufWriter")
 	if w.err != nil {
 		return w.err
 	}

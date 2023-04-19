@@ -20,7 +20,7 @@ var port = flag.Int("port", 50052, "port number")
 var addr = flag.String("addr", "localhost:50052", "the address to connect to")
 
 var kasp = keepalive.ServerParameters{
-	MaxConnectionAge: 3 * time.Second,
+	MaxConnectionAge: 2 * time.Second,
 }
 
 // server implements EchoServer.
@@ -55,7 +55,7 @@ func main() {
 	}
 	sLis := latency.Longhaul.Listener(lis)
 
-	s := grpc.NewServer(grpc.KeepaliveParams(kasp))
+	s := grpc.NewServer(grpc.KeepaliveParams(kasp), grpc.WriteBufferSize(32*1024))
 	pb.RegisterEchoServer(s, &server{})
 
 	go func() {
