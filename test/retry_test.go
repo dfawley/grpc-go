@@ -44,6 +44,37 @@ import (
 	testpb "google.golang.org/grpc/interop/grpc_testing"
 )
 
+func (s) TestRetryConnectionErrors(t *testing.T) {
+	// Nothing's running on localhost:9090!
+	cc, err := grpc.Dial("localhost:9090",
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithDefaultServiceConfig(fmt.Sprintf(`{
+		"methodConfig": [{
+			"name": [{"service": "grpc.testing.TestService"}],
+			"retryPolicy": {
+					"MaxAttempts": 5,
+					"InitialBackoff": "1s",
+					"MaxBackoff": "1s",
+					"BackoffMultiplier": 1,
+					"RetryableStatusCodes": ["UNAVAILABLE"]
+			}
+	}]
+	}`)),
+	)
+	defer cc.Close()
+	if err != nil {
+		t.Fatal("Error creating client:", err)
+	}
+	client := testpb.NewTestServiceClient(cc)
+	start := time.Now()
+	_, err = client.EmptyCall(context.Background(), &testpb.Empty{})
+	// Based on the config I would expect the elapsed time to be at least 5 seconds
+	// But in reality it's around 1s
+	fmt.Println("Elapsed: ", time.Since(start))
+	fmt.Println("Error:   ", err)
+	fmt.Println("Status:  ", cc.GetState().String())
+}
+
 func (s) TestRetryUnary(t *testing.T) {
 	i := -1
 	ss := &stubserver.StubServer{

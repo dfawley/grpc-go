@@ -620,12 +620,14 @@ func (cs *clientStream) commitAttempt() {
 // retried, the bool indicates whether it is being retried transparently.
 func (a *csAttempt) shouldRetry(err error) (bool, error) {
 	cs := a.cs
-
+	logger.Error("Should retry?", err.Error())
 	if cs.finished || cs.committed || a.drop {
 		// RPC is finished or committed or was dropped by the picker; cannot retry.
+		logger.Error(cs.finished, cs.committed, a.drop)
 		return false, err
 	}
 	if a.s == nil && a.allowTransparentRetry {
+		logger.Error("transparent")
 		return true, nil
 	}
 	// Wait for the trailers.
@@ -636,9 +638,11 @@ func (a *csAttempt) shouldRetry(err error) (bool, error) {
 	}
 	if cs.firstAttempt && unprocessed {
 		// First attempt, stream unprocessed: transparently retry.
+		logger.Error("first attempt unprocessed")
 		return true, nil
 	}
 	if cs.cc.dopts.disableRetry {
+		logger.Error("retry disabled")
 		return false, err
 	}
 
@@ -646,6 +650,7 @@ func (a *csAttempt) shouldRetry(err error) (bool, error) {
 	hasPushback := false
 	if a.s != nil {
 		if !a.s.TrailersOnly() {
+			logger.Error("not trailers only")
 			return false, err
 		}
 
@@ -676,15 +681,18 @@ func (a *csAttempt) shouldRetry(err error) (bool, error) {
 
 	rp := cs.methodConfig.RetryPolicy
 	if rp == nil || !rp.RetryableStatusCodes[code] {
+		logger.Error("not retryable")
 		return false, err
 	}
 
 	// Note: the ordering here is important; we count this as a failure
 	// only if the code matched a retryable code.
 	if cs.retryThrottler.throttle() {
+		logger.Error("throttled")
 		return false, err
 	}
 	if cs.numRetries+1 >= rp.MaxAttempts {
+		logger.Error("max attempts")
 		return false, err
 	}
 
@@ -698,19 +706,23 @@ func (a *csAttempt) shouldRetry(err error) (bool, error) {
 		if max := float64(rp.MaxBackoff); cur > max {
 			cur = max
 		}
+		logger.Errorf("RP=%+v; fact=%v, cur=%v", rp, fact, cur)
 		dur = time.Duration(grpcrand.Int63n(int64(cur)))
 		cs.numRetriesSincePushback++
 	}
 
 	// TODO(dfawley): we could eagerly fail here if dur puts us past the
 	// deadline, but unsure if it is worth doing.
+	logger.Error("Timer with duration", dur)
 	t := time.NewTimer(dur)
 	select {
 	case <-t.C:
 		cs.numRetries++
+		logger.Error("time to retry")
 		return false, nil
 	case <-cs.ctx.Done():
 		t.Stop()
+		logger.Error("rpc deadline reached")
 		return false, status.FromContextError(cs.ctx.Err()).Err()
 	}
 }
